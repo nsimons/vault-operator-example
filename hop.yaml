@@ -1,0 +1,199 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hop
+spec:
+  strategy:
+    type: Recreate
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: hop
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: hop
+    spec:
+      containers:
+        - name: hop
+          # https://github.com/banzaicloud/bank-vaults/pkgs/container/vault-operator
+          image: ghcr.io/banzaicloud/vault-operator:1.19.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - vault-operator
+            - -sync_period=1m
+            - -verbose
+          env:
+            - name: WATCH_NAMESPACE
+              value: holvi
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: OPERATOR_NAME
+              value: hop
+            - name: OPERATOR_LOG_LEVEL
+              value: debug
+      serviceAccountName: hop
+---
+kind: ServiceAccount
+apiVersion: v1
+metadata:
+  name: hop
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: hop
+roleRef:
+  kind: Role
+  name: hop
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: ServiceAccount
+    name: hop
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: hop
+rules:
+
+# 'list' is usually needed whenever a 'get' is needed
+# This is due to some weird caching behavior in client.Get
+# https://github.com/kubernetes-sigs/controller-runtime/issues/550
+# https://github.com/fluxcd/helm-controller/issues/512
+# https://github.com/fluxcd/helm-controller/pull/513
+
+
+#
+# Manipulate the vault custom resource
+# Need to atleast:
+#   - list resources
+#   - get specific resources
+#   - update e.g. status field
+- apiGroups:
+  - vault.banzaicloud.com
+  resources:
+  - "*"
+  verbs:
+  - "*"
+
+#
+# Operator leader coordination
+# Need to maintain a lease/configmap to know which operator replica is the leader
+#
+
+- apiGroups:
+  - ""
+  - coordination.k8s.io
+  resources:
+  - configmaps
+  - leases
+  verbs:
+  - create
+
+- apiGroups:
+  - ""
+  - coordination.k8s.io
+  resources:
+  - configmaps
+  - leases
+  verbs:
+  #- list
+  - get
+  #- watch
+  - update
+  resourceNames:
+  - vault-operator-lock
+
+#
+# Secrets
+# Checking whether tls secret exists, manipulate the vault raw-config secret
+#
+
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+  - list
+  - watch
+
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - update
+  resourceNames:
+  - holvi-raw-config
+
+#
+# Controller is creating events
+#
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - "*"
+
+#
+# Controller is creating services
+# and keeps track of pods
+#
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - create
+
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  - services
+  verbs:
+  - list
+  - watch
+
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  - services
+  verbs:
+  - get
+  - update
+  resourceNames:
+  - holvi
+  - holvi-0
+  - holvi-1
+  - holvi-2
+  # ... and so on for each svc/pod
+
+#
+# Managing the Vault statefulset
+#
+- apiGroups:
+  - apps
+  resources:
+  - statefulsets
+  verbs:
+  - create
+  - list
+  - watch
+
+- apiGroups:
+  - apps
+  resources:
+  - statefulsets
+  verbs:
+  - get
+  - update
+  resourceNames:
+  - holvi

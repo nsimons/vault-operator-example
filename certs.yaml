@@ -1,0 +1,19 @@
+subject: cn=root
+ca: true
+---
+subject: cn=holvi
+issuer: cn=root
+sans:
+- DNS:holvi
+- DNS:holvi.holvi
+- DNS:holvi.holvi.svc.cluster.local
+- DNS:holvi-0
+- DNS:holvi-0.holvi
+- DNS:holvi-0.holvi.svc.cluster.local
+- DNS:holvi-1
+- DNS:holvi-1.holvi
+- DNS:holvi-1.holvi.svc.cluster.local
+- DNS:holvi-2
+- DNS:holvi-2.holvi
+- DNS:holvi-2.holvi.svc.cluster.local
+- IP:127.0.0.1

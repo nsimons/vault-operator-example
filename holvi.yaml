@@ -1,0 +1,227 @@
+kind: ServiceAccount
+apiVersion: v1
+metadata:
+  name: holvi
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: holvi
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["*"]
+    # Unseal key & root token secret
+    resourceNames: ["holvi-keys"]
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: holvi
+roleRef:
+  kind: Role
+  name: holvi
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: ServiceAccount
+    name: holvi
+---
+# This binding allows the deployed Vault instance to authenticate clients
+# through Kubernetes ServiceAccounts (if configured so).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: holvi-auth-delegator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+  - kind: ServiceAccount
+    name: holvi
+    namespace: holvi
+---
+# Need to create the secret in beforehand, otherwise we would need to grant
+# create permission to k8s secrets
+# Unseal key & root token secret
+kind: Secret
+apiVersion: v1
+metadata:
+  name: holvi-keys
+# https://github.com/banzaicloud/bank-vaults/issues/1814
+stringData:
+  foo: bar
+---
+apiVersion: "vault.banzaicloud.com/v1alpha1"
+kind: Vault
+metadata:
+  name: holvi
+spec:
+  # Size defines the number of Vault instances in the cluster (>= 1 means HA)
+  size: 3
+  # Image specifies the Vault image to use for the Vault instances
+  # https://hub.docker.com/_/vault
+  image: vault:1.12.3
+
+  # BankVaultsImage specifies the Bank Vaults image to use for Vault unsealing and configuration
+  # https://github.com/banzaicloud/bank-vaults/pkgs/container/bank-vaults
+  bankVaultsImage: ghcr.io/banzaicloud/bank-vaults:1.19.0
+
+  # Support for affinity Rules
+  # affinity:
+  #   nodeAffinity:
+  #     requiredDuringSchedulingIgnoredDuringExecution:
+  #       nodeSelectorTerms:
+  #       - matchExpressions:
+  #         - key : "node-role.kubernetes.io/your_role"
+  #           operator: In
+  #           values: ["true"]
+
+  # Support for pod nodeSelector rules to control which nodes can be chosen to run
+  # the given pods
+  # nodeSelector:
+  #   "node-role.kubernetes.io/your_role": "true"
+
+  # Support for node tolerations that work together with node taints to control
+  # the pods that can like on a node
+  # tolerations:
+  # - effect: NoSchedule
+  #   key: node-role.kubernetes.io/your_role
+  #   operator: Equal
+  #   value: "true"
+
+  # StatsDDisabled specifies if StatsD based metrics should be disabled
+  statsdDisabled: true
+  # ServiceMonitorEnabled enables the creation of Prometheus Operator specific ServiceMonitor for Vault.
+  serviceMonitorEnabled: false
+  # FluentDEnabled specifies if FluentD based log exportation should be enabled
+  fluentdEnabled: false
+
+  # Specify the ServiceAccount where the Vault Pod and the Bank-Vaults configurer/unsealer is running
+  serviceAccount: holvi
+
+  # Specify the Service's type where the Vault Service is exposed
+  # Please note that some Ingress controllers like https://github.com/kubernetes/ingress-gce
+  # forces you to expose your Service on a NodePort
+  serviceType: ClusterIP
+
+  # cd /home/zniksim/dev/configs/holvi; k create secret generic holvi-certs --from-file=certs/tls.crt --from-file=certs/tls.key --from-file=certs/ca.crt 
+  existingTlsSecretName: holvi-certs
+
+  # In some cases, you have to set permissions for the raft directory.
+  # For example in the case of using a local kind cluster, uncomment the lines below.
+  # vaultInitContainers:
+  #   - name: raft-permission
+  #     image: busybox
+  #     command:
+  #       - /bin/sh
+  #       - -c
+  #       - |
+  #         chown -R 100:1000 /vault/file
+  #     volumeMounts:
+  #       - name: vault-raft
+  #         mountPath: /vault/file
+
+  # VolumeClaimTemplates define some extra Kubernetes PersistentVolumeClaim templates for the Vault Statefulset.
+  volumeClaimTemplates:
+    - metadata:
+        name: holvi-raft
+      spec:
+        # https://kubernetes.io/docs/concepts/storage/persistent-volumes/#class-1
+        # storageClassName: ""
+        accessModes:
+          - ReadWriteOnce
+        volumeMode: Filesystem
+        resources:
+          requests:
+            storage: 1Gi
+
+  # VolumeMounts define some extra Kubernetes Volume mounts for the Vault Pods.
+  volumeMounts:
+    - name: holvi-raft
+      mountPath: /vault/file
+
+  # Describe where you would like to store the Vault unseal keys and root token.
+  unsealConfig:
+    options:
+      # The preFlightChecks flag enables unseal and root token storage tests
+      # This is true by default
+      preFlightChecks: false
+      # The storeRootToken flag enables storing of root token in chosen storage
+      # This is true by default
+      storeRootToken: true
+    kubernetes:
+      secretName: holvi-keys
+      secretNamespace: holvi
+
+  # A YAML representation of a final vault config file.
+  # See https://www.vaultproject.io/docs/configuration/ for more information.
+  config:
+    storage:
+      raft:
+        path: "/vault/file"
+    listener:
+    - tcp:
+        address: "0.0.0.0:8200"
+        tls_cert_file: /vault/tls/server.crt
+        tls_key_file: /vault/tls/server.key
+    - tcp:
+        address: "127.0.0.1:8202"
+        tls_disable: true
+    api_addr: https://holvi.holvi:8200
+    cluster_addr: "https://${.Env.POD_NAME}:8201"
+    ui: true
+    disable_mlock: true # IPC_LOCK & SETFCAP will be added to capabilities otherwise
+    #log_requests_level: info
+
+  resources:
+    # A YAML representation of resource ResourceRequirements for vault container
+    # Detail can reference: https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container
+    vault:
+      limits:
+        memory: "512Mi"
+        cpu: "200m"
+      requests:
+        memory: "256Mi"
+        cpu: "100m"
+
+  # VaultContainerSpec is a Kubernetes Container specification snippet that will be merged into the operator generated
+  # Vault Container specification.
+  vaultContainerSpec:
+    name: vault
+    startupProbe:
+      httpGet:
+        path: /v1/sys/init
+        port: api-port
+        scheme: HTTPS
+      periodSeconds: 8
+      successThreshold: 1
+      timeoutSeconds: 2
+      failureThreshold: 3
+    livenessProbe:
+      httpGet:
+        path: /v1/sys/init
+        port: api-port
+        scheme: HTTPS
+      periodSeconds: 8
+      successThreshold: 1
+      timeoutSeconds: 2
+      failureThreshold: 3
+      initialDelaySeconds: 1
+
+  # SecurityContext is a Kubernetes PodSecurityContext that will be applied to all Pods created by the operator.
+  securityContext:
+    runAsNonRoot: false  # public vault image runs as root
+
+  # VaultEnvsConfig is a list of Kubernetes environment variable definitions that will be passed to the Vault container.
+  vaultEnvsConfig:
+    - name: VAULT_LOG_LEVEL
+      value: debug
+    # Vault CLI configuration
+    - name: VAULT_ADDR
+      value: http://127.0.0.1:8202
+    - name: VAULT_SKIP_VERIFY
+      value: "1"
+
+  # VaultContainers add extra containers
+  #vaultContainers:
