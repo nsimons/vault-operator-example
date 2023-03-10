@@ -88,7 +88,6 @@ rules:
   - ""
   - coordination.k8s.io
   resources:
-  - configmaps
   - leases
   verbs:
   - create
@@ -97,12 +96,32 @@ rules:
   - ""
   - coordination.k8s.io
   resources:
-  - configmaps
   - leases
   verbs:
-  #- list
   - get
-  #- watch
+  - update
+  resourceNames:
+  - vault-operator-lock
+
+# The below configmap permissions can be removed once bank-vaults changes
+# 'LeaderElectionResourceLock' to 'leases'. It's currently implicitly set
+# to 'configmapsleases' during the transition between controller-runtime
+# versions 0.7.x and 0.12.x.
+- apiGroups:
+  - ""
+  - coordination.k8s.io
+  resources:
+  - configmaps
+  verbs:
+  - create
+
+- apiGroups:
+  - ""
+  - coordination.k8s.io
+  resources:
+  - configmaps
+  verbs:
+  - get
   - update
   resourceNames:
   - vault-operator-lock
@@ -132,7 +151,7 @@ rules:
   - holvi-raw-config
 
 #
-# Controller is creating events
+# Controller is handling events
 #
 - apiGroups:
   - ""
@@ -142,7 +161,7 @@ rules:
   - "*"
 
 #
-# Controller is creating services
+# Controller is managing services
 # and keeps track of pods
 #
 - apiGroups:
