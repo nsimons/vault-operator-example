@@ -8,7 +8,7 @@ This is just a playground to try out different kinds of operator things. For exa
 
 * `.holvi.env`, helper file for Vault CLI usage (via port-forward)
 * `certs.yaml`, manifest that generates development certificates using [certyaml](https://github.com/tsaarni/certyaml)
-* `deploy-holvi.bash`, deploys the application in the `holvi` namespace
+* `deploy.bash`, deploys the application in the `holvi` namespace
 * `enable-k8s-auth.bash`, enable [Kubernetes Auth Method](https://developer.hashicorp.com/vault/docs/auth/kubernetes)
 * `enable-pki.bash`, enable [PKI Secret Engine](https://developer.hashicorp.com/vault/docs/secrets/pki), importing the locally-generated CA certificate
 * `holvi.yaml`, the manifests related to Holvi (the Vault cluster)
@@ -32,7 +32,7 @@ Generate the development certificates
 
 Deploy the application
 
-    ./deploy-holvi.bash
+    ./deploy.bash
     watch -n1 -- kubectl -n holvi get po
 
 Start port-forwarding (in a separate window)
@@ -122,7 +122,7 @@ Three should be enough for demo purposes, but if you want more there are minor c
 
 Complete redeployment is easy, just do
 
-    ./deploy-holvi.bash -r
+    ./deploy.bash -r
 
 This will clean the namespace and start over.
 
