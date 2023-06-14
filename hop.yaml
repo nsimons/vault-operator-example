@@ -16,8 +16,8 @@ spec:
     spec:
       containers:
         - name: hop
-          # https://github.com/banzaicloud/bank-vaults/pkgs/container/vault-operator
-          image: ghcr.io/banzaicloud/vault-operator:1.19.0
+          # https://github.com/bank-vaults/vault-operator/pkgs/container/vault-operator
+          image: ghcr.io/bank-vaults/vault-operator:v1.20.0
           imagePullPolicy: IfNotPresent
           command:
             - vault-operator

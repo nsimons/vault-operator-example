@@ -31,7 +31,7 @@ else
     printf "%s\n" "Deploying..."
 fi
 
-kubectl apply -f https://raw.githubusercontent.com/banzaicloud/bank-vaults/main/operator/deploy/crd.yaml
+kubectl apply -f https://raw.githubusercontent.com/bank-vaults/vault-operator/main/deploy/crd.yaml
 
 kubectl create ns $ns
 

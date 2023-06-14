@@ -1,6 +1,6 @@
-# Minimalistic Vault Operator demo using banzaicloud/bank-vaults
+# Minimalistic Vault Operator demo using Vault-Operator from Banzaicloud
 
-This repository contains an example application, Holvi, which consists of a [Vault operator](https://github.com/banzaicloud/bank-vaults) and 3-replica [Vault](https://github.com/hashicorp/vault) cluster using Integrated Storage (Raft) backend.
+This repository contains an example application, Holvi, which consists of a [Vault operator](https://github.com/bank-vaults/vault-operator) and 3-replica [Vault](https://github.com/hashicorp/vault) cluster using Integrated Storage (Raft) backend.
 
 This is just a playground to try out different kinds of operator things. For example, the application is configured to reside within a single namespace and tries to minimize the RBAC permissions requested from Kubernetes.
 
@@ -98,8 +98,14 @@ Enable PKI secret engine, import the locally generated CA (requires Vault 1.11.0
     # Compile bank-vaults
     DOCKER_TAG=holvi make docker          && kind load docker-image ghcr.io/banzaicloud/bank-vaults:holvi
 
+    git clone git@github.com:bank-vaults/vault-operator.git && cd vault-operator
+
     # Compile operator
-    DOCKER_TAG=holvi make docker-operator && kind load docker-image ghcr.io/banzaicloud/vault-operator:holvi
+    # (Since vault-operator is being re-organized there's high likelyhood that these commands will change)
+    make container-image
+    img_hash=$(docker image ls | head -n2 | sort | head -n1 | awk '{print $3}')
+    docker tag "${img_hash}" ghcr.io/bank-vaults/vault-operator:holvi
+    kind load docker-image ghcr.io/bank-vaults/vault-operator:holvi
 
 
 ### Changing Images
